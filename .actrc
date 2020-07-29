@@ -1,0 +1,7 @@
+# default params when running `act`
+# each param must be on its own line w/ no trailing whitespace
+# https://github.com/nektos/act
+
+-b
+-P ubuntu-latest=swift:latest
+-a local-test

@@ -48,24 +48,18 @@ jobs:
           carthage bootstrap --platform iOS,watchOS --configuration Debug 2>&1 | tee $CARTHAGE_DEBUG_OUTPUT
           carthage bootstrap --platform iOS,watchOS --configuration Release 2>&1 | tee $CARTHAGE_RELEASE_OUTPUT
 
-      - name: Consolidate All Log Files
+      - name: Find All Log Files
         if: ${{ always() }}
-        run: |
-          mkdir -p $CARTHAGE_LOGS
-
-          CARTHAGE_DEBUG_LOGS=`grep "xcodebuild\ output\ can\ be\ found\ in\ *" $CARTHAGE_DEBUG_OUTPUT | awk '{ print $NF }'`
-          while IFS= read -r line ; do 
-            cp $line $CARTHAGE_LOGS
-          done <<< "$CARTHAGE_DEBUG_LOGS"
-
-          CARTHAGE_RELEASE_LOGS=`grep "xcodebuild\ output\ can\ be\ found\ in\ *" $CARTHAGE_RELEASE_OUTPUT | awk '{ print $NF }'`
-          while IFS= read -r line ; do 
-            cp $line $CARTHAGE_LOGS
-          done <<< "$CARTHAGE_RELEASE_LOGS"
+        id: log-finder
+        uses: justAnotherDev/log-finder-action@v1.0
+        with:
+          content-path: |
+            ${{ env.CARTHAGE_DEBUG_OUTPUT }}
+            ${{ env.CARTHAGE_RELEASE_OUTPUT }}
 
       - name: Upload Log Files
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: build-log
-          path: ${{ env.CARTHAGE_LOGS }}
+          path: ${{ steps.log-finder.outputs.log-files }}
