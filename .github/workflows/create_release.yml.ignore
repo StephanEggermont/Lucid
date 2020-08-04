@@ -1,0 +1,37 @@
+on:
+  push:
+
+name: Create Release
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Bump version
+        id: version-manager
+        uses: justAnotherDev/action-version@master
+
+      - name: Sanitize branch name
+        id: sanitizer
+        run: |
+          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+
+      - name: Push
+        uses: github-actions-x/commit@v2.6
+        with:
+          push-branch: ${{ steps.sanitizer.outputs.branch }}
+          commit-message: "Bump version to ${{ steps.version-manager.outputs.version }}"
+          name: github-actions
+
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ steps.version-manager.outputs.version }}
+          release_name: ${{ steps.version-manager.outputs.version }}
