@@ -9,12 +9,11 @@
 ##
 
 name: Publish Carthage Binary
-on: 
-  push: 
-    tags:
-      - 'v*'
+on: push
+
 env:
   DEVELOPER_DIR: /Applications/Xcode_12.app/Contents/Developer
+  XCCONFIG_FILE: Carthage/Patches/lucid.xcconfig
 
 jobs:
   carthage_archive:
@@ -28,14 +27,32 @@ jobs:
       - name: Clone Project
         uses: actions/checkout@v2
 
+      # https://scribdjira.atlassian.net/browse/IPT-4851
+      - name: Remove schemes that are iOS 13 only 
+        run: |
+          rm Lucid.xcodeproj/xcshareddata/xcschemes/Lucid-iOS.xcscheme
+          rm Lucid.xcodeproj/xcshareddata/xcschemes/Lucid-watchOS.xcscheme
+          rm Lucid.xcodeproj/xcshareddata/xcschemes/LucidTestKit.xcscheme
+          rm Lucid.xcodeproj/xcshareddata/xcschemes/LucidSample.xcscheme
+
+      # For Xcode 12 make sure EXCLUDED_ARCHS is set to arm architectures otherwise the build will fail on lipo due to duplicate architectures.
+      # https://github.com/Carthage/Carthage/issues/3019#issuecomment-665136323
+      - name: Fix Carthage Bug
+        run: |
+          echo 'EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_simulator__NATIVE_ARCH_64_BIT_x86_64__XCODE_1200 = arm64 arm64e armv7 armv7s armv6 armv8' >> $GITHUB_WORKSPACE/$XCCONFIG_FILE
+          echo 'EXCLUDED_ARCHS = $(inherited) $(EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_$(EFFECTIVE_PLATFORM_SUFFIX)__NATIVE_ARCH_64_BIT_$(NATIVE_ARCH_64_BIT)__XCODE_$(XCODE_VERSION_MAJOR))' >> $GITHUB_WORKSPACE/$XCCONFIG_FILE
+
+      - name: Use custom xcconfig file
+        run: echo "XCODE_XCCONFIG_FILE=$GITHUB_WORKSPACE/$XCCONFIG_FILE" >> $GITHUB_ENV
+
       - name: Bootstrap
-        run: XCODE_XCCONFIG_FILE="../../Patches/lucid.xcconfig" carthage bootstrap --platform iOS,watchOS --log-path $CARTHAGE_BOOTSTRAP_OUTPUT
+        run: carthage bootstrap --platform iOS,watchOS --log-path $CARTHAGE_BOOTSTRAP_OUTPUT
 
       - name: Build Framework
-        run: XCODE_XCCONFIG_FILE="../../Patches/lucid.xcconfig" carthage build Lucid --no-skip-current --platform iOS,watchOS --log-path $CARTHAGE_BUILD_OUTPUT
+        run: carthage build Lucid --no-skip-current --platform iOS,watchOS --log-path $CARTHAGE_BUILD_OUTPUT
 
       - name: Generate Archive for Release
-        run: carthage archive Lucid
+        run: carthage archive Lucid-ReactiveKit
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -52,38 +69,38 @@ jobs:
             ${{ env.CARTHAGE_BOOTSTRAP_OUTPUT }}
             ${{ env.CARTHAGE_BUILD_OUTPUT }}
 
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: carthage_archive
-    steps:
-      - name: Download Artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: Lucid.framework.zip
+  # release:
+  #   name: Release
+  #   runs-on: ubuntu-latest
+  #   needs: carthage_archive
+  #   steps:
+  #     - name: Download Artifact
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: Lucid.framework.zip
 
-      - name: Publish Release
-        uses: fnkr/github-action-ghr@v1
-        env:
-          GHR_PATH: Lucid.framework.zip
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Publish Release
+  #       uses: fnkr/github-action-ghr@v1
+  #       env:
+  #         GHR_PATH: Lucid.framework.zip
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  carthage_test:
-    name: Carthage Test
-    runs-on: macos-latest
-    needs: release
-    env: 
-      GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-      CARTHAGE_OUTPUT: carthage_output.txt
-    steps:
-      - name: Retrieve Latest Lucid Framework Using Carthage
-        run: |
-          echo 'git "git@github.com:scribd/Lucid.git"' > Cartfile
-          carthage bootstrap --platform iOS,watchOS --log-path $CARTHAGE_OUTPUT
+  # carthage_test:
+  #   name: Carthage Test
+  #   runs-on: macos-latest
+  #   needs: release
+  #   env: 
+  #     GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+  #     CARTHAGE_OUTPUT: carthage_output.txt
+  #   steps:
+  #     - name: Retrieve Latest Lucid Framework Using Carthage
+  #       run: |
+  #         echo 'git "git@github.com:scribd/Lucid.git"' > Cartfile
+  #         carthage bootstrap --platform iOS,watchOS --log-path $CARTHAGE_OUTPUT
 
-      - name: Upload Log Files
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-log
-          path: ${{ env.CARTHAGE_OUTPUT }}
+  #     - name: Upload Log Files
+  #       if: ${{ always() }}
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: build-log
+  #         path: ${{ env.CARTHAGE_OUTPUT }}
